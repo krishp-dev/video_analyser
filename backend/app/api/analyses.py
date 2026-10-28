@@ -160,6 +160,13 @@ def get_analysis_status(analysis_id: str):
 
     status = row["status"]
     stage = row["stage"]
+
+    # Auto-heal / start queued jobs when polled if no worker thread is active
+    if status == "queued" and analysis_id not in analysis_worker._active_jobs:
+        analysis_worker.start_analysis_async(analysis_id)
+        stage = "validating"
+        status = "processing"
+
     human_status = STAGE_HUMAN_NAMES.get(stage, stage.replace("_", " ").capitalize())
 
     warnings = json.loads(row["warnings_json"]) if row["warnings_json"] else []
@@ -206,6 +213,28 @@ def cancel_analysis(analysis_id: str):
 
     success = analysis_worker.cancel_job(analysis_id)
     return {"message": "Cancellation signal sent." if success else "Job was not actively running."}
+
+@router.post("/analyses/{analysis_id}/start")
+def start_analysis_job(analysis_id: str):
+    """Explicitly trigger or restart analysis for a queued, failed, or cancelled job."""
+    with get_db() as conn:
+        row = conn.execute("SELECT status FROM analysis_jobs WHERE id = ?", (analysis_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Analysis job not found.")
+        if row["status"] in ["completed", "completed_with_warnings"]:
+            return {"message": f"Job is already finished with status '{row['status']}'."}
+        if analysis_id in analysis_worker._active_jobs:
+            return {"message": "Job is already actively running."}
+
+        conn.execute("""
+            UPDATE analysis_jobs 
+            SET status = 'queued', stage = 'validating', progress_percentage = 5.0, errors_json = '[]'
+            WHERE id = ?
+        """, (analysis_id,))
+
+    analysis_worker.start_analysis_async(analysis_id)
+    return {"message": "Analysis pipeline successfully triggered."}
+
 
 @router.get("/analyses/{analysis_id}", response_model=AnalysisDetailResponse)
 def get_analysis_detail(analysis_id: str):
