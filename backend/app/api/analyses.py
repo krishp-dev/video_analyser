@@ -48,6 +48,7 @@ STAGE_HUMAN_NAMES = {
 @router.post("/analyses", response_model=AnalysisStatusResponse)
 def start_analysis(payload: AnalysisCreateRequest):
     """
+    
     Register a new video analysis job and begin asynchronous pipeline processing.
     """
     video_id = payload.video_id
