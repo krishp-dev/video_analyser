@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-dark-950 text-slate-100 antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Custom sleek dark scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B0F17;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1C273C;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #344565;
+}
+
+/* Card surfaces */
+.card-surface {
+  @apply bg-dark-900 border border-dark-750/70 rounded-xl shadow-lg shadow-black/40;
+}
+
+.card-surface-hover {
+  @apply card-surface transition-all duration-200 hover:border-brand-500/40 hover:shadow-brand-500/5;
+}
+
+/* Glassmorphism accent */
+.glass-panel {
+  @apply bg-dark-900/80 backdrop-blur-md border border-dark-750/80 rounded-xl;
+}
+
+/* Custom pulse badge */
+.badge-pulse {
+  @apply relative flex h-2.5 w-2.5;
+}
+.badge-pulse span:first-child {
+  @apply animate-ping absolute inline-flex h-full w-full rounded-full opacity-75;
+}
+.badge-pulse span:last-child {
+  @apply relative inline-flex rounded-full h-2.5 w-2.5;
+}
