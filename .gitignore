@@ -43,33 +43,12 @@ yarn-error.log*
 .env.*
 !.env.example
 
-# Application Data & Artifacts
-data/uploads/*
-!data/uploads/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
-data/reports/*
-!data/reports/.gitkeep
-# Media & Video files
-*.mp4
-*.avi
-*.mov
-*.webm
-*.mkv
-*.jpg
-*.jpeg
-*.png
+# Backend duplicated model weights
+backend/*.pt
 
-# AI Models & Weights
-*.pt
-*.pth
-*.bin
-*.onnx
-data/models/*
-!data/models/.gitkeep
-data/*.db
-data/*.db-wal
-data/*.db-shm
+# SQLite Temporary Journal / WAL Locks
+*.db-wal
+*.db-shm
 
 # OS Files
 Thumbs.db
