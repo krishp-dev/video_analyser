@@ -67,7 +67,12 @@ export const App: React.FC = () => {
 
   const handleViewAnalysis = (analysisId: string) => {
     setActiveAnalysisId(analysisId);
-    setCurrentTab('results');
+    const item = analyses.find((a) => a.analysis_id === analysisId);
+    if (item && (item.status === 'queued' || item.status === 'processing')) {
+      setCurrentTab('processing');
+    } else {
+      setCurrentTab('results');
+    }
   };
 
   return (
