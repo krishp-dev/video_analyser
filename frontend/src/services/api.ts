@@ -122,7 +122,13 @@ export const api = {
     return `${API_BASE}/videos/${videoId}/stream`;
   },
 
-  getExportUrl(analysisId: string, format: 'json' | 'csv'): string {
+  async searchAnalysis(analysisId: string, query: string): Promise<import('../types').SearchResponse> {
+    const res = await fetch(`${API_BASE}/analyses/${analysisId}/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) throw new Error('Search request failed.');
+    return res.json();
+  },
+
+  getExportUrl(analysisId: string, format: 'json' | 'csv' | 'pdf'): string {
     return `${API_BASE}/analyses/${analysisId}/export?format=${format}`;
   }
 };

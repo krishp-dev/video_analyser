@@ -21,9 +21,11 @@ The exponential growth of digital video content across surveillance, online educ
 ### Objectives
 1. **Local & Privacy-Preserving Execution:** Run computer vision inference locally with native CPU support and optional CUDA GPU acceleration.
 2. **Multi-Stage Computer Vision Pipeline:** Deconstruct video analysis into independent, verifiable stages: metadata extraction, frame sampling, scene shift detection, object detection, keyframe selection, visual captioning, and evidence summarization.
-3. **Evidence Grounding:** Generate natural language summaries grounded strictly in observed bounding boxes, scene transitions, and visual captions.
-4. **Interactive Dashboard:** Provide a synchronized video player with timestamp-seeking controls, detection overlay studio, interactive timeline, and keyframe inspection.
-5. **Auditable Reporting:** Export machine-readable JSON and tabular CSV reports.
+3. **Multi-Object Tracking (MOT):** Assign persistent centroid track IDs (`#1 Apple`, `#2 Car`) across consecutive frames for instance consistency and motion tracking.
+4. **Domain-Specific Intelligence & Quality Inspection:** Autonomous crop ripeness scoring (HSV color-space analysis, ripeness %, commercial grade estimation), traffic flow velocity metrics, and facility occupancy tracking.
+5. **Semantic "Ask Video" Search:** Natural language multi-modal search allowing users to query detected objects, quality attributes, and scene events with fractional timestamp seeking.
+6. **Virtual Tripwire & ROI HUD:** Interactive virtual line crossing boundary in the video player HUD for ingress/egress counting.
+7. **Evidence Grounding & Executive Reporting:** Deterministic summaries grounded strictly in observed bounding boxes and scene transitions, exportable as JSON, CSV, and multi-page forensic PDF dossiers.
 
 ---
 
@@ -70,11 +72,12 @@ video-analyser/
 │   │   │   ├── video_service.py     # Container validation & dual-engine metadata
 │   │   │   ├── frame_service.py     # Uniform PTS frame sampling
 │   │   │   ├── scene_service.py     # 2D HSV histogram & luminance change detection
-│   │   │   ├── detection_service.py # YOLO model caching & bounding box rendering
+│   │   │   ├── detection_service.py # YOLO model caching, centroid tracking & overlays
+│   │   │   ├── domain_service.py    # Produce ripeness inspection & domain telemetry
 │   │   │   ├── caption_service.py   # BLIP image captioning & failure handling
 │   │   │   ├── keyframe_service.py  # Multi-criteria keyframe selection & deduplication
 │   │   │   ├── summary_service.py   # Deterministic evidence-grounded summarizer
-│   │   │   └── report_service.py    # JSON & CSV report generators
+│   │   │   └── report_service.py    # JSON, CSV & formal PDF dossier generators
 │   │   ├── workers/
 │   │   │   └── analysis_worker.py   # In-process asynchronous worker & stage tracker
 │   │   ├── storage/

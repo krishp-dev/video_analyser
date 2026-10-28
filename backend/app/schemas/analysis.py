@@ -22,6 +22,8 @@ class DetectionItem(BaseModel):
     bbox: list[float]  # [x1, y1, x2, y2] pixel coordinates
     timestamp: float
     model_name: str
+    track_id: Optional[int] = None
+    attributes: Optional[dict[str, Any]] = None
 
 class CaptionItem(BaseModel):
     id: str
@@ -99,7 +101,23 @@ class AnalysisDetailResponse(BaseModel):
     errors: list[str] = []
     processing_duration: Optional[float] = None
     models_used: dict[str, str] = {}
+    domain_insights: Optional[dict[str, Any]] = None
     created_at: str
+
+class SearchMomentItem(BaseModel):
+    timestamp: float
+    formatted_time: str
+    relevance_score: float
+    match_type: str  # "object", "attribute", "caption", "scene"
+    label: str
+    description: str
+    bbox: Optional[list[float]] = None
+    frame_preview_url: Optional[str] = None
+
+class SearchResponse(BaseModel):
+    query: str
+    total_matches: int
+    results: list[SearchMomentItem]
 
 class AnalysisListItem(BaseModel):
     analysis_id: str

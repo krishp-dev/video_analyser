@@ -30,6 +30,8 @@ export interface Detection {
   bbox: [number, number, number, number]; // [x1, y1, x2, y2]
   timestamp: number;
   model_name: string;
+  track_id?: number;
+  attributes?: Record<string, any>;
 }
 
 export interface Caption {
@@ -90,7 +92,31 @@ export interface AnalysisDetail {
     object_detection?: string;
     image_captioning?: string;
   };
+  domain_insights?: {
+    domain_type: string;
+    primary_metric_label: string;
+    primary_metric_value: string;
+    status_indicator: string;
+    details: Record<string, any>;
+  };
   created_at: string;
+}
+
+export interface SearchMomentItem {
+  timestamp: number;
+  formatted_time: string;
+  relevance_score: number;
+  match_type: 'object' | 'attribute' | 'caption' | 'scene';
+  label: string;
+  description: string;
+  bbox?: [number, number, number, number];
+  frame_preview_url?: string;
+}
+
+export interface SearchResponse {
+  query: string;
+  total_matches: number;
+  results: SearchMomentItem[];
 }
 
 export interface AnalysisStatus {

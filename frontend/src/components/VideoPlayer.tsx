@@ -6,7 +6,8 @@ import {
   VolumeX,
   Maximize,
   RotateCcw,
-  Sparkles
+  Sparkles,
+  ShieldAlert
 } from 'lucide-react';
 import { formatDuration } from '../utils/formatters';
 import { Detection } from '../types';
@@ -39,6 +40,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [showOverlays, setShowOverlays] = useState(true);
+  const [showTripwire, setShowTripwire] = useState(false);
 
   // Expose imperative seeking handle
   useImperativeHandle(ref, () => ({
@@ -114,10 +116,13 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     }
   };
 
-  // Find active detections for the current timestamp window (+/- 0.6s)
+  // Find active detections for current time window (+/- 0.6s)
   const activeDetections = showOverlays
     ? detections.filter((d) => Math.abs(d.timestamp - currentTime) < 0.6)
     : [];
+
+  // Tripwire cross count
+  const tripwireCount = detections.filter(d => d.bbox && (d.bbox[1] + d.bbox[3]) / 2.0 > 180).length;
 
   return (
     <div
@@ -136,20 +141,39 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         playsInline
       />
 
-      {/* Real-Time Detection Overlays (normalized relative coordinate rendering) */}
+      {/* Real-Time Detection Overlays (with Track IDs & Ripeness) */}
       {showOverlays && activeDetections.length > 0 && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-start p-4">
           <div className="flex flex-wrap gap-2">
-            {activeDetections.map((det) => (
-              <span
-                key={det.id}
-                className="inline-flex items-center gap-1.5 rounded-md bg-brand-600/90 px-2 py-1 text-xs font-semibold text-white shadow-md backdrop-blur-md border border-brand-400/40"
-              >
-                <Sparkles className="h-3 w-3 text-brand-200" />
-                {det.class_name} ({Math.round(det.confidence * 100)}%)
-              </span>
-            ))}
+            {activeDetections.map((det) => {
+              const track = det.track_id ? `#${det.track_id} ` : '';
+              const rip = det.attributes?.ripeness_status ? ` • ${det.attributes.ripeness_status}` : '';
+              return (
+                <span
+                  key={det.id}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-brand-600/90 px-2.5 py-1 text-xs font-semibold text-white shadow-md backdrop-blur-md border border-brand-400/40"
+                >
+                  <Sparkles className="h-3 w-3 text-brand-200" />
+                  {track}{det.class_name} ({Math.round(det.confidence * 100)}%){rip}
+                </span>
+              );
+            })}
           </div>
+        </div>
+      )}
+
+      {/* Interactive Virtual Tripwire Line */}
+      {showTripwire && (
+        <div
+          className="pointer-events-none absolute inset-x-0 z-15 border-b-2 border-dashed border-cyan-400/80 shadow-[0_0_12px_rgba(34,211,238,0.8)] flex items-center justify-between px-3"
+          style={{ top: '55%' }}
+        >
+          <span className="bg-cyan-950/90 text-cyan-300 border border-cyan-500/40 text-[10px] font-mono px-2 py-0.5 rounded shadow">
+            TRIPWIRE SENSOR A &bull; {tripwireCount} DETECTIONS MONITORED
+          </span>
+          <span className="bg-cyan-950/90 text-cyan-400 border border-cyan-500/40 text-[10px] font-mono px-2 py-0.5 rounded">
+            ACTIVE ROI
+          </span>
         </div>
       )}
 
@@ -224,6 +248,20 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Tripwire Toggle */}
+            <button
+              onClick={() => setShowTripwire(!showTripwire)}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium border transition ${
+                showTripwire
+                  ? 'border-cyan-500/50 bg-cyan-500/20 text-cyan-300'
+                  : 'border-dark-700 bg-dark-800 text-slate-400 hover:text-slate-200'
+              }`}
+              title="Toggle Virtual Tripwire Boundary"
+            >
+              <ShieldAlert className="h-3.5 w-3.5" />
+              <span>Tripwire {showTripwire ? 'ON' : 'OFF'}</span>
+            </button>
+
             {/* Toggle Overlay Badge */}
             {detections.length > 0 && (
               <button

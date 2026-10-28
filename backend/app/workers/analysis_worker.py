@@ -14,6 +14,7 @@ from app.services.detection_service import detection_service
 from app.services.caption_service import caption_service
 from app.services.keyframe_service import keyframe_service
 from app.services.summary_service import summary_service
+from app.services.domain_service import domain_service
 
 class AnalysisWorker:
     def __init__(self):
@@ -49,7 +50,8 @@ class AnalysisWorker:
         warnings: Optional[list[str]] = None,
         errors: Optional[list[str]] = None,
         summary_text: Optional[str] = None,
-        duration: Optional[float] = None
+        duration: Optional[float] = None,
+        domain_insights_json: Optional[str] = None
     ):
         with get_db() as conn:
             # Fetch existing warnings & errors
@@ -84,6 +86,7 @@ class AnalysisWorker:
                     errors_json = ?,
                     summary_text = COALESCE(?, summary_text),
                     processing_duration = COALESCE(?, processing_duration),
+                    domain_insights_json = COALESCE(?, domain_insights_json),
                     completed_at = COALESCE(?, completed_at)
                 WHERE id = ?
             """, (
@@ -96,6 +99,7 @@ class AnalysisWorker:
                 json.dumps(existing_errors),
                 summary_text,
                 duration,
+                domain_insights_json,
                 completed_str,
                 analysis_id
             ))
@@ -204,16 +208,21 @@ class AnalysisWorker:
                 progress_callback=det_cb
             )
 
-            # Save detections to DB
+            # Save detections to DB with persistent track_id and domain attributes
             with get_db() as conn:
                 for d in detections:
                     conn.execute("""
-                        INSERT INTO detections (id, frame_id, analysis_id, class_name, confidence, bbox_x1, bbox_y1, bbox_x2, bbox_y2, timestamp, model_name)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO detections (
+                            id, frame_id, analysis_id, class_name, confidence,
+                            bbox_x1, bbox_y1, bbox_x2, bbox_y2, timestamp, model_name,
+                            track_id, attributes_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         d["id"], d["frame_id"], d["analysis_id"], d["class_name"], d["confidence"],
                         d["bbox"][0], d["bbox"][1], d["bbox"][2], d["bbox"][3],
-                        d["timestamp"], d["model_name"]
+                        d["timestamp"], d["model_name"],
+                        d.get("track_id", 1),
+                        json.dumps(d.get("attributes", {}))
                     ))
 
             if self.is_cancelled(analysis_id):
@@ -299,6 +308,12 @@ class AnalysisWorker:
             )
             summary_json_str = json.dumps(summary_dict)
 
+            # STAGE: Domain Intelligence & Telemetry Synthesis
+            domain_insights = domain_service.compute_domain_telemetry(
+                dict(video_row), detections, float(video_row["duration"])
+            )
+            domain_insights_str = json.dumps(domain_insights)
+
             # STAGE: Finalize
             total_duration = round(time.time() - start_time, 2)
             final_status = "completed_with_warnings" if job_warnings else "completed"
@@ -312,7 +327,8 @@ class AnalysisWorker:
                 percentage=100.0,
                 warnings=job_warnings,
                 summary_text=summary_json_str,
-                duration=total_duration
+                duration=total_duration,
+                domain_insights_json=domain_insights_str
             )
 
         except Exception as e:

@@ -23,7 +23,9 @@ from app.schemas.analysis import (
     CaptionItem,
     SceneCandidateItem,
     KeyframeItem,
-    SampledFrameDetail
+    SampledFrameDetail,
+    SearchResponse,
+    SearchMomentItem
 )
 
 router = APIRouter()
@@ -241,18 +243,27 @@ def get_analysis_detail(analysis_id: str):
             (analysis_id,)
         ).fetchall()
 
-    # Build objects
-    detections = [
-        DetectionItem(
+    # Build objects with persistent tracking and attributes
+    detections = []
+    for i, d in enumerate(det_rows):
+        attrs = {}
+        if "attributes_json" in d.keys() and d["attributes_json"]:
+            try:
+                attrs = json.loads(d["attributes_json"])
+            except Exception:
+                pass
+        t_id = d["track_id"] if "track_id" in d.keys() and d["track_id"] is not None else (i + 1)
+        detections.append(DetectionItem(
             id=d["id"],
             frame_id=d["frame_id"],
             class_name=d["class_name"],
             confidence=d["confidence"],
             bbox=[d["bbox_x1"], d["bbox_y1"], d["bbox_x2"], d["bbox_y2"]],
             timestamp=d["timestamp"],
-            model_name=d["model_name"]
-        ) for d in det_rows
-    ]
+            model_name=d["model_name"],
+            track_id=t_id,
+            attributes=attrs
+        ))
 
     captions = [
         CaptionItem(
@@ -305,6 +316,13 @@ def get_analysis_detail(analysis_id: str):
         except Exception:
             pass
 
+    domain_insights = None
+    if "domain_insights_json" in job.keys() and job["domain_insights_json"]:
+        try:
+            domain_insights = json.loads(job["domain_insights_json"])
+        except Exception:
+            pass
+
     config_dict = json.loads(job["config_json"]) if job["config_json"] else {}
     warnings = json.loads(job["warnings_json"]) if job["warnings_json"] else []
     errors = json.loads(job["errors_json"]) if job["errors_json"] else []
@@ -341,6 +359,7 @@ def get_analysis_detail(analysis_id: str):
         warnings=warnings,
         errors=errors,
         processing_duration=job["processing_duration"],
+        domain_insights=domain_insights,
         models_used={
             "object_detection": job["model_yolo"] or settings.YOLO_MODEL_NAME,
             "image_captioning": job["model_caption"] or settings.CAPTION_MODEL_NAME
@@ -446,9 +465,8 @@ def get_frame_image(analysis_id: str, frame_id: str):
     return FileResponse(p, media_type="image/jpeg")
 
 @router.get("/analyses/{analysis_id}/export")
-def export_analysis_report(analysis_id: str, format: str = Query("json", pattern="^(json|csv)$")):
-    """Export analysis report in JSON or CSV format."""
-    # Fetch full analysis data
+def export_analysis_report(analysis_id: str, format: str = Query("json", pattern="^(json|csv|pdf)$")):
+    """Export analysis report in JSON, CSV, or Executive PDF Dossier format."""
     detail = get_analysis_detail(analysis_id)
     data = detail.model_dump()
 
@@ -466,6 +484,99 @@ def export_analysis_report(analysis_id: str, format: str = Query("json", pattern
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename=report_{analysis_id[:8]}.csv"}
         )
+    elif format == "pdf":
+        pdf_bytes = report_service.export_pdf(data)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=report_{analysis_id[:8]}.pdf"}
+        )
+
+@router.get("/analyses/{analysis_id}/search", response_model=SearchResponse)
+def search_analysis(analysis_id: str, q: str = Query(..., min_length=1)):
+    """
+    Search video content by natural language query across objects, attributes, and moments.
+    """
+    detail = get_analysis_detail(analysis_id)
+    query_terms = [t.lower().strip() for t in q.split() if t.strip()]
+
+    results = []
+    seen_timestamps = set()
+
+    for d in detail.detections:
+        cname = d.class_name.lower()
+        attrs = d.attributes or {}
+        attr_words = " ".join(str(v).lower() for v in attrs.values())
+
+        score = 0.0
+        match_type = "object"
+        match_label = f"{d.class_name.title()} (#{d.track_id or 1})"
+
+        for term in query_terms:
+            if term == cname or term in cname:
+                score += 0.85
+            elif term in attr_words:
+                score += 0.70
+                match_type = "attribute"
+            elif term in ["car", "vehicle", "traffic", "truck"] and cname in ["car", "truck", "bus"]:
+                score += 0.80
+            elif term in ["fruit", "apple", "produce", "ripe"] and cname in ["apple", "orange", "banana"]:
+                score += 0.85
+            elif term in ["bottle", "drink", "beverage", "conveyor"] and cname == "bottle":
+                score += 0.85
+            elif term in ["person", "people", "student", "worker", "pedestrian"] and cname == "person":
+                score += 0.80
+
+        if score > 0:
+            ts_key = round(d.timestamp, 1)
+            if ts_key not in seen_timestamps or score >= 0.8:
+                seen_timestamps.add(ts_key)
+                mins = int(d.timestamp // 60)
+                secs = int(d.timestamp % 60)
+                frac = int((d.timestamp - int(d.timestamp)) * 10)
+                formatted_time = f"{mins:02d}:{secs:02d}.{frac}"
+
+                desc = f"Observed {d.class_name} with {d.confidence*100:.1f}% confidence."
+                if attrs.get("grade"):
+                    desc += f" Quality: {attrs['grade']}."
+                elif attrs.get("ripeness_status"):
+                    desc += f" Ripeness: {attrs['ripeness_status']}."
+
+                results.append(SearchMomentItem(
+                    timestamp=d.timestamp,
+                    formatted_time=formatted_time,
+                    relevance_score=min(1.0, score),
+                    match_type=match_type,
+                    label=match_label,
+                    description=desc,
+                    bbox=d.bbox,
+                    frame_preview_url=f"/api/analyses/{analysis_id}/frames/{d.frame_id}/image"
+                ))
+
+    # Also search scene shifts
+    for s in detail.scene_candidates:
+        s_reason = s.reason.lower()
+        if any(term in s_reason for term in query_terms) or any(term in ["scene", "cut", "transition", "shift"] for term in query_terms):
+            mins = int(s.timestamp // 60)
+            secs = int(s.timestamp % 60)
+            formatted_time = f"{mins:02d}:{secs:02d}"
+            results.append(SearchMomentItem(
+                timestamp=s.timestamp,
+                formatted_time=formatted_time,
+                relevance_score=0.75,
+                match_type="scene",
+                label="Candidate Scene Transition",
+                description=s.reason,
+                bbox=None,
+                frame_preview_url=None
+            ))
+
+    results.sort(key=lambda x: x.relevance_score, reverse=True)
+    return SearchResponse(
+        query=q,
+        total_matches=len(results),
+        results=results[:12]
+    )
 
 @router.delete("/analyses/{analysis_id}")
 def delete_analysis(analysis_id: str):

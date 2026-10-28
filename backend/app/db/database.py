@@ -126,6 +126,18 @@ def init_db():
     CREATE INDEX IF NOT EXISTS idx_keyframes_analysis ON keyframes(analysis_id);
     """)
 
+    # Schema migrations for advanced analytics
+    for col_def, tbl in [
+        ("track_id INTEGER DEFAULT 1", "detections"),
+        ("attributes_json TEXT DEFAULT '{}'", "detections"),
+        ("domain_insights_json TEXT DEFAULT '{}'", "analysis_jobs")
+    ]:
+        col_name = col_def.split()[0]
+        try:
+            conn.execute(f"ALTER TABLE {tbl} ADD COLUMN {col_def};")
+        except Exception:
+            pass
+
     conn.commit()
     conn.close()
 
